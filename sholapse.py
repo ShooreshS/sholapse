@@ -1,64 +1,73 @@
 from time import sleep
 from datetime import datetime
-from sh import gphoto as gph
+from sh import gphoto2 as gp
 import signal, os, subprocess
 
 
-shoot_date = datetime.now()strftime("%Y-%m-%d")
-shoot_time = datetime.now()strftime("%Y-%m-%d %H:%M:%S")
-picID = "timeLaps"
-
-clear_cmd = ["--folder", "SD/DCIM/100CANON", "-R", "--delete-all-files"]
-triger_cmd = ["--triger-capture"]
+#shoot_date = datetime.now().strftime("%Y-%m-%d")
+shoot_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+picID = "shol_"
+frame_counter = 0
+clear_cmd = ["--folder", "/store_00020001/DCIM/100CANON", "-R", "--delete-all-files"]
+triger_cmd = ["--trigger-capture"]
 download_cmd = [ "--get-all-files"]
-
-folder_name = shoot_date + picID
-save_location = "/home/shooresh/timelaps/" + folder_name
+row_format ="{:>33} {:>6} {:>15}" 
+folder_name =  picID + shoot_time
+frame_name =  picID +  "{0:0=4d}".format(frame_counter) 
+save_location = "/home/shooresh/sholapse/sholapse/images/" + folder_name
 
 def kill_gphoto2_process():
-    subprocess.Popen(["ps", "-A"], stdout=subprocess.PIPE)
+    p = subprocess.Popen(["ps", "-A"], stdout=subprocess.PIPE)
     out, err = p.communicate()
-    
     for line in out.splitlines():
         if b'gvfsd-gphoto2' in line:
-            pid = int(line.splite(none, 1))[0])
+            pid = int(line.splite(none, 1)[0])
             os.kill(pid, signal.SIGKILL)
 
 def create_save_folder():
     try:
         os.makedirs(save_location)
     except:
-        print("Cannot create_save_folder...")
+        print("save to:", folder_name, end=" \n")
     os.chdir(save_location)
+
+def rename_files():
+    for filename in os.listdir(save_location):
+        if not (filename.startswith(picID)):
+            global frame_counter
+            frame_counter += 1
+            frame_name = picID + "{0:0=4d}".format(frame_counter) # datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            #print("rename: ", filename, " to: ", frame_name, end="" )
+            if filename.endswith(".JPG"):
+                os.rename(filename, (frame_name + ".JPG"))
+                #print(".JPG", end="")
+            elif filename.endswith(".CR2"):
+                os.rename(filename, (frame_name + ".CR2"))
+                #print(".CR2 ", end="")
  
 def capture_image():
+# must handle exceptions such as;  Canon EOS Capture failed to release: Perhaps no focus?
     gp(triger_cmd)
-    sleep(4)
+    sleep(2) # depending on exposure time + 1 Sec 
     gp(download_cmd)
+    rename_files()
     gp(clear_cmd)
-    
-def rename_files(ID):
-    for filename in os.listdir("."):
-        if len(filename) > 16:
-            if filename.endswith(".JPG"):
-                shoot_time = datetime.now()strftime("%Y-%m-%d %H:%M:%S")
-                os.rename_files(filename, (shoot_time + ID + ".JPG"))
-                print("jpg")
-            elif filename.endswith(".CR2"):
-                shoot_time = datetime.now()strftime("%Y-%m-%d %H:%M:%S")
-                os.rename(filename, (shoot_time + ID + ".CR2")
-                print("CR2")
-            
 
 # initial config
 kill_gphoto2_process()
-
-# loop
-while(true):
-    gp(clear_cmd)
-    create_save_folder()
-    rename_files(picID)
-    
-
+create_save_folder()
+gp(clear_cmd)
+frame_counter = 0
+counter = 0
+print(" Frame name                        F_count   Video length\n", "-"*60, "\n ", end="")
+try:
+    while True:
+        capture_image()
+        counter += 1
+        print(row_format.format((frame_name+".JPG"), counter, counter/25), end="\r ")
+        sleep(1) # +2 seconds for download each image
+except KeyboardInterrupt:
+    rename_files()
+    print("\n", "-"*60, "\n", "Total frames: ", counter, "\nEstimated footage: ", counter/25) 
 
 
