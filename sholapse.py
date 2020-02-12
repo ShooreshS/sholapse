@@ -64,6 +64,7 @@ try:
     while True:
         capture_image()
         counter += 1
+        global frame_name
         print(row_format.format((frame_name+".JPG"), counter, counter/25), end="\r ")
         sleep(1) # +2 seconds for download each image
 except KeyboardInterrupt:
