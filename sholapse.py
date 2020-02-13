@@ -65,9 +65,10 @@ try:
         capture_image()
         counter += 1
         print(row_format.format((frame_name+".JPG"), counter, counter/25), end="\r ")
-        sleep(1) # +2 seconds for download each image
+        sleep(10) # +2 seconds for download each image
 except KeyboardInterrupt:
     rename_files()
+    kill_gphoto2_process()
     print("\n", "-"*60, "\n", "Total frames: ", counter, "\nEstimated footage: ", counter/25) 
 
 
