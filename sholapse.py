@@ -2,29 +2,35 @@ from time import sleep
 from datetime import datetime
 from sh import gphoto2 as gp
 import signal, os, subprocess
+from nanpy  import ArduinoApi, SerialManager
+from nanpy import Servo
+
+# Arduino
+light_pin = 13
+servo = Servo(7)
 
 
 #shoot_date = datetime.now().strftime("%Y-%m-%d")
-shoot_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+shoot_time = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
 picID = "shol_"
 frame_counter = 0
 clear_cmd = ["--folder", "/store_00020001/DCIM/100CANON", "-R", "--delete-all-files"]
 triger_cmd = ["--trigger-capture"]
 download_cmd = [ "--get-all-files"]
 row_format ="{:>33} {:>6} {:>15}" 
-main_dir_name =  picID + shoot_time
+main_dir_name = picID + shoot_time # "shol_2020-02-15_15:32:03" # 
 frame_name =  picID +  "{0:0=4d}".format(frame_counter) 
 save_location = "/home/shooresh/sholapse/sholapse/images/" + main_dir_name
 
-lighting_time = 2  # cieling(actual lighting time on the camera) + 1
-frame_interval_time = 10  # lighting_time + move_stack + move_stack back + move_frame + n = opperation_time < frame_interval_time, effective frame_interval_time -= opperation_time 
+lighting_time = 14  # cieling(actual lighting time on the camera) + 1
+frame_interval_time = 3600  # lighting_time + move_stack + move_stack back + move_frame + n = opperation_time < frame_interval_time, effective frame_interval_time -= opperation_time 
 
 
 def kill_gphoto2_process():
     p = subprocess.Popen(["ps", "-A"], stdout=subprocess.PIPE)
     out, err = p.communicate()
     for line in out.splitlines():
-        print(line)
+        #print(line)
         if b'gvfsd-gphoto2' in line:
             pid = int(line.split()[0])
             os.kill(pid, signal.SIGKILL)
@@ -35,6 +41,9 @@ def create_save_dir(save_loc):
     except:
         print("save to:", main_dir_name, end=" \n")
     os.chdir(save_loc)
+
+def rename_last_file():
+	rename_files("last_pic", "")
 
 def rename_files(pic_name, stack_dir):
     for filename in os.listdir(save_location + stack_dir):
@@ -64,18 +73,19 @@ def move_stack(step):
 	print("[move_stack] ... ")
 	if(step > 0):
 		# move step forward
+		servo.write(step)
 		print("[move_stack] step FORWARD ")
 	else:
 		print("[move_stack] move back ")
 		# move |step| backward 
 
-def move_plan(x, y, z):
-	print("[move_plan] moveing forward by ", x, " ", y," ", z)
+def move_scene(x, y, z):
+	print("[move_scene] moveing forward by ", x, " ", y," ", z)
 
 
 def capture_stack():
-	total_frame_cnt = 10 # 1-9999
-	stack_count = 4
+	total_frame_cnt = 100 # 1-9999
+	stack_count = 1
 	global frame_counter
 	frame_counter += 1
 	print("[capt_stk] ", )
@@ -85,17 +95,54 @@ def capture_stack():
 		create_save_dir(save_location + stack_dir)
 		for j in range(stack_count):
 			pic_name = "stk_f_" + "{0:0=2d}".format(j+1)
-			# lights(1)
+			a.digitalWrite(light_pin, a.HIGH)
+			print("lighs on")
 			capture_image(pic_name, stack_dir)  # 
-			# lights(0)
-			move_stack(1)
-		move_stack(stack_count * -1)
+			a.digitalWrite(light_pin, a.LOW)		
+			print("lights off")
+			move_stack((j+1)*10)
+		move_stack(stack_count * -10)
 		print("[capt_stk] stack_count ", stack_count)
-		move_plan(1, 1, 1)
+		move_scene(1, 1, 1)
 		print(" Waitng for ", frame_interval_time, " second...")
 		sleep(frame_interval_time)
+
+def export_frames():
+	print("[ex frm] exporting frames to ", save_location, "/frames")
+	os.chdir(save_location)
+	os.system("mkdir ex")				
+	for frame_dir in os.listdir(save_location):
+		if not (frame_dir.startswith("frm_")):
+			continue
+		next_dir = save_location+"/"+frame_dir
+		print ("next: ", next_dir)
+		#os.chdir(next_dir)
+		#os.system("echo $PWD")
+		files_list = ""
+		for stk_f in os.listdir(next_dir):			
+			if(stk_f.endswith(".JPG")):
+				files_list += frame_dir+"/"+stk_f + " " 
+				#os.system("cp "+stk_f+" ex/") 
+		print("enfuse ", files_list, " -o ", save_location+"/ex/"+frame_dir+".tif")
+		os.system("enfuse "+ files_list +" -o "+  save_location+"/ex/"+frame_dir+".JPG")
+			#align_images(" --") # if align command imported 
+			#os.system("enfuse ")
+	
+def	render_video():
+	print("[rndr vid] rendering MP4 videon\n", "ffmpeg -i "+ save_location+"/ex/frm_%04d.JPG -pix_fmt yuv420p -o "+ save_location+"/out.mp4")
+	os.system("ffmpeg -i "+ save_location+"/ex/frm_%04d.JPG -pix_fmt yuv420p "+main_dir_name+".mp4")
+
 		
-# initial config
+# initial config arduino
+try:
+	connection = SerialManager()
+	a = ArduinoApi(connection = connection)
+except:
+	print("failed to connect")
+print("connectted")
+a.pinMode(light_pin, a.OUTPUT)
+
+# Camera
 kill_gphoto2_process()
 create_save_dir(save_location)
 gp(clear_cmd)
@@ -107,11 +154,13 @@ counter = 0
 print(" Frame name                        F_count   Video length\n", "-"*60, "\n ", end="")
 try:
 	capture_stack()
+	export_frames() # align() enfuse   
+	render_video()
 except KeyboardInterrupt:
-    rename_files()
+    rename_last_file()
     kill_gphoto2_process()
+    a.digitalWrite(light_pin, a.LOW)
     print("\n", "-"*60, "\n", "Total frames: ", counter, "\nEstimated footage: ", counter/25)
-
 
 #    while True:
  #       capture_image()

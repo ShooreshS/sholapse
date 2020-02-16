@@ -1,13 +1,11 @@
 # Sholapse
-Sholapse is a program to help you control your canon camera programitacally from your Computer.
+Sholapse is a program to help you control your camera* programitacally from your Computer or a RaspberiPi board.
 
 ## How to?
 
-## installation
-
-
+## Installation
+### Requirements 
 ## Opperate
-
 
 ## Contrebution
 
